@@ -29,10 +29,11 @@ jobs:
           cache: maven
 
       # ── Run unit + slice tests (no Docker / Testcontainers) ───────────────
-      # Excludes StudentVaultIntegrationTest which requires Docker
+      # Uses plain `mvn` (pre-installed on ubuntu-latest) since only mvnw.cmd
+      # (Windows) is in the repo — the Unix mvnw wrapper is absent.
       - name: Run unit and slice tests
         run: |
-          ./mvnw test \
+          mvn test \
             -Dtest="StudentServiceTest,StudentControllerTest,ResultServiceTest,ResultControllerTest,BenchmarkControllerTest" \
             --no-transfer-progress
 
