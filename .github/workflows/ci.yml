@@ -11,6 +11,11 @@ jobs:
     name: Unit & Slice Tests (Java ${{ matrix.java }})
     runs-on: ubuntu-latest
 
+    permissions:
+      checks: write        # required by dorny/test-reporter to post check runs
+      contents: read
+      pull-requests: write # required to post PR comments with test results
+
     strategy:
       matrix:
         java: [ 21 ]
