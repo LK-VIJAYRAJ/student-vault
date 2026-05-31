@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:db}:${DB_PORT:5432}/${DB_NAME:studentvault}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    show-sql: false
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    com.studentvault: INFO

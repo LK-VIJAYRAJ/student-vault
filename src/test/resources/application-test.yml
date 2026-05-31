@@ -1,0 +1,34 @@
+# ── Test Profile ─────────────────────────────────────────────────────────────
+# Used by @WebMvcTest slice tests and @SpringBootTest with H2.
+# Activated automatically via spring.profiles.active=test or
+# @ActiveProfiles("test") in test classes.
+# ─────────────────────────────────────────────────────────────────────────────
+spring:
+  datasource:
+    url: jdbc:h2:mem:studentvault_test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL;NON_KEYWORDS=VALUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop       # Build schema from entities; tear down after tests
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+
+  flyway:
+    enabled: false                 # Don't run migrations — H2 schema from JPA entities
+
+  h2:
+    console:
+      enabled: false
+
+logging:
+  level:
+    com.studentvault: WARN
+    org.hibernate.SQL: WARN

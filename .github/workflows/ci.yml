@@ -1,0 +1,56 @@
+name: CI — Build & Unit Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Unit & Slice Tests (Java ${{ matrix.java }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        java: [ 21 ]
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Java Setup ────────────────────────────────────────────────────────
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          cache: maven
+
+      # ── Run unit + slice tests (no Docker / Testcontainers) ───────────────
+      # Excludes StudentVaultIntegrationTest which requires Docker
+      - name: Run unit and slice tests
+        run: |
+          ./mvnw test \
+            -Dtest="StudentServiceTest,StudentControllerTest,ResultServiceTest,ResultControllerTest,BenchmarkControllerTest" \
+            --no-transfer-progress
+
+      # ── Publish test results ──────────────────────────────────────────────
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Maven Test Results
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      # ── Upload Surefire XML on failure ────────────────────────────────────
+      - name: Upload Surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7

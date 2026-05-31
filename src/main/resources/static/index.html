@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudentVault — Dashboard</title>
+  <meta name="description" content="StudentVault live dashboard — explore students, results, and real-time database index performance benchmarks." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Design Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg:          #0a0d14;
+      --bg-card:     rgba(255,255,255,0.04);
+      --bg-card-h:   rgba(255,255,255,0.07);
+      --border:      rgba(255,255,255,0.08);
+      --border-h:    rgba(139,92,246,0.5);
+      --accent:      #8b5cf6;
+      --accent-2:    #06b6d4;
+      --accent-3:    #f59e0b;
+      --green:       #10b981;
+      --red:         #ef4444;
+      --text:        #f1f5f9;
+      --text-muted:  #94a3b8;
+      --text-dim:    #64748b;
+      --radius:      14px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    /* ── Reset & Base ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* animated gradient blobs */
+    body::before {
+      content: '';
+      position: fixed;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
+      top: -200px; left: -200px;
+      animation: blob-drift 14s ease-in-out infinite alternate;
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%);
+      bottom: -150px; right: -150px;
+      animation: blob-drift 18s ease-in-out infinite alternate-reverse;
+      pointer-events: none; z-index: 0;
+    }
+
+    @keyframes blob-drift {
+      from { transform: translate(0,0) scale(1); }
+      to   { transform: translate(60px,40px) scale(1.1); }
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────────── */
+    .app { position: relative; z-index: 1; }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────── */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: 240px; height: 100vh;
+      background: rgba(10,13,20,0.9);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 28px 16px;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 8px 28px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .logo-text { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+    .logo-sub  { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    .nav { display: flex; flex-direction: column; gap: 4px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      font-size: 14px; font-weight: 500; color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .nav-item:hover   { background: var(--bg-card); color: var(--text); border-color: var(--border); }
+    .nav-item.active  { background: rgba(139,92,246,0.15); color: var(--accent); border-color: rgba(139,92,246,0.3); }
+    .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 14px 8px 0;
+      border-top: 1px solid var(--border);
+    }
+    .stack-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--text-dim);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── Main ───────────────────────────────────────────────────────────── */
+    .main {
+      margin-left: 240px;
+      padding: 32px 36px;
+      min-height: 100vh;
+    }
+
+    /* ── Page Header ────────────────────────────────────────────────────── */
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 32px;
+    }
+    .page-title    { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+    .page-subtitle { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+
+    .header-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 100px; padding: 8px 16px;
+      font-size: 13px; color: var(--text-muted);
+    }
+
+    /* ── Section ────────────────────────────────────────────────────────── */
+    .section { display: none; }
+    .section.active { display: block; animation: fade-in 0.3s ease; }
+    @keyframes fade-in { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
+
+    /* ── Stats Grid ─────────────────────────────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      transition: all 0.25s ease;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      opacity: 0; transition: opacity 0.25s;
+    }
+    .stat-card:hover { border-color: var(--border-h); transform: translateY(-2px); box-shadow: var(--shadow); }
+    .stat-card:hover::before { opacity: 1; }
+    .stat-icon { font-size: 22px; margin-bottom: 12px; }
+    .stat-value { font-size: 30px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-sub   { font-size: 12px; color: var(--green); margin-top: 6px; }
+
+    /* ── Card ───────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 16px; font-weight: 700; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+
+    /* ── Benchmark ──────────────────────────────────────────────────────── */
+    .benchmark-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+    .bench-card {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 20px;
+      transition: border-color 0.2s;
+    }
+    .bench-card:hover { border-color: rgba(139,92,246,0.4); }
+    .bench-name { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+    .bench-bars { display: flex; flex-direction: column; gap: 8px; }
+    .bench-bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .bench-bar-label { width: 80px; color: var(--text-muted); flex-shrink: 0; }
+    .bench-bar-wrap { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+    .bench-bar-fill {
+      height: 100%; border-radius: 4px;
+      transition: width 1.2s cubic-bezier(0.16,1,0.3,1);
+    }
+    .bench-bar-fill.slow { background: linear-gradient(90deg, #ef4444, #f97316); }
+    .bench-bar-fill.fast { background: linear-gradient(90deg, #8b5cf6, #06b6d4); }
+    .bench-bar-ms { width: 50px; text-align: right; font-weight: 600; }
+    .bench-badge {
+      display: inline-block; margin-top: 12px;
+      background: rgba(16,185,129,0.15); color: var(--green);
+      border: 1px solid rgba(16,185,129,0.3);
+      border-radius: 6px; padding: 3px 10px;
+      font-size: 12px; font-weight: 600;
+    }
+
+    .chart-wrap { position: relative; height: 320px; }
+
+    /* ── Run Benchmark Btn ──────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px; border: none;
+      font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(139,92,246,0.3);
+    }
+    .btn-primary:hover   { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(139,92,246,0.4); }
+    .btn-primary:active  { transform: translateY(0); }
+    .btn-primary:disabled{ opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Search Bar ─────────────────────────────────────────────────────── */
+    .search-row {
+      display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .search-input, .search-select {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px;
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .search-input { flex: 1; min-width: 200px; }
+    .search-select { min-width: 160px; }
+    .search-input:focus, .search-select:focus { border-color: var(--accent); }
+
+    /* ── Table ──────────────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th {
+      text-align: left; padding: 10px 14px;
+      color: var(--text-muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.5px; font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td { padding: 13px 14px; color: var(--text); vertical-align: middle; }
+
+    .badge {
+      display: inline-block; padding: 3px 9px; border-radius: 6px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-dept { background: rgba(139,92,246,0.15); color: var(--accent); }
+    .badge-sem  { background: rgba(6,182,212,0.12); color: var(--accent-2); }
+
+    /* ── Pagination ─────────────────────────────────────────────────────── */
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .page-info { font-size: 13px; color: var(--text-muted); }
+    .page-btns { display: flex; gap: 6px; }
+    .page-btn {
+      padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-muted); font-size: 13px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .page-btn.current { background: rgba(139,92,246,0.2); border-color: var(--accent); color: var(--accent); }
+
+    /* ── Skeleton ───────────────────────────────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.04) 25%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(255,255,255,0.04) 75%);
+      background-size: 400% 100%;
+      animation: shimmer 1.5s ease infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { from{background-position:100% 0} to{background-position:-100% 0} }
+
+    /* ── Empty & Error States ───────────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 60px 20px;
+      color: var(--text-muted); font-size: 14px;
+    }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .error-banner {
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+      color: #fca5a5; border-radius: 10px; padding: 14px 18px;
+      font-size: 13px; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ── Summary Bar ────────────────────────────────────────────────────── */
+    .summary-bar {
+      background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.1));
+      border: 1px solid rgba(139,92,246,0.3);
+      border-radius: 12px; padding: 16px 20px;
+      font-size: 14px; color: var(--text); margin-bottom: 24px;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    /* ── Loading Spinner ────────────────────────────────────────────────── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; padding: 20px 8px; }
+      .logo-text,.logo-sub,.nav-item span { display: none; }
+      .nav-item { justify-content: center; }
+      .main { margin-left: 60px; padding: 20px 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🎓</div>
+      <div>
+        <div class="logo-text">StudentVault</div>
+        <div class="logo-sub">v1.0 · Spring Boot</div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <div class="nav-item active" id="nav-overview" onclick="showSection('overview')">
+        <span class="nav-icon">📊</span>
+        <span>Overview</span>
+      </div>
+      <div class="nav-item" id="nav-benchmark" onclick="showSection('benchmark')">
+        <span class="nav-icon">⚡</span>
+        <span>Benchmark</span>
+      </div>
+      <div class="nav-item" id="nav-students" onclick="showSection('students')">
+        <span class="nav-icon">👥</span>
+        <span>Students</span>
+      </div>
+      <div class="nav-item" id="nav-results" onclick="showSection('results')">
+        <span class="nav-icon">📋</span>
+        <span>Results</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="stack-badge">
+        <span class="dot"></span>
+        <span>PostgreSQL 16 · Flyway</span>
+      </div>
+      <div class="stack-badge" style="margin-top:8px">
+        <span style="font-size:11px">⚙️</span>
+        <a href="https://github.com/LK-VIJAYRAJ/student-vault/actions"
+           target="_blank" rel="noopener"
+           style="color:var(--text-dim);font-size:11px;text-decoration:none"
+           onmouseover="this.style.color='var(--accent)'"
+           onmouseout="this.style.color='var(--text-dim)'">
+          CI / GitHub Actions
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- ══ OVERVIEW ═════════════════════════════════════════════════════ -->
+    <section id="section-overview" class="section active">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Overview</h1>
+          <p class="page-subtitle">Live metrics from your PostgreSQL database</p>
+        </div>
+        <div class="header-pill" id="overview-ts">Loading…</div>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <!-- filled by JS -->
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🗄️ Tech Stack</div>
+        <div class="card-sub">What powers StudentVault</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">☕</div>
+            <div style="font-weight:600;font-size:14px">Java 21</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Spring Boot 3.4.5</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">🐘</div>
+            <div style="font-weight:600;font-size:14px">PostgreSQL 16</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">B-tree + Composite Indexes</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">🔄</div>
+            <div style="font-weight:600;font-size:14px">Flyway</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">V1 Schema · V2 Seed · V3 Indexes</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">🐋</div>
+            <div style="font-weight:600;font-size:14px">Docker</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">docker-compose up --build</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">📡</div>
+            <div style="font-weight:600;font-size:14px">Actuator</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Health + Metrics</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">🧪</div>
+            <div style="font-weight:600;font-size:14px">Testcontainers</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Real PostgreSQL in tests</div>
+          </div>
+          <div class="bench-card">
+            <div style="font-size:22px;margin-bottom:6px">⚙️</div>
+            <div style="font-weight:600;font-size:14px">GitHub Actions</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">CI · 40 tests · 3 layers</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ BENCHMARK ════════════════════════════════════════════════════ -->
+    <section id="section-benchmark" class="section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">⚡ Live Benchmark</h1>
+          <p class="page-subtitle">Real before/after query performance — 50,000 students · 200,000 results</p>
+        </div>
+        <button class="btn btn-primary" id="run-bench-btn" onclick="runBenchmark()">
+          <span>▶ Run Benchmark</span>
+        </button>
+      </div>
+
+      <div id="bench-error" style="display:none" class="error-banner">
+        <span>⚠️</span>
+        <span id="bench-error-msg">Could not connect to the API.</span>
+      </div>
+
+      <div id="bench-summary" style="display:none" class="summary-bar">
+        <span style="font-size:18px">🏆</span>
+        <span id="bench-summary-text"></span>
+      </div>
+
+      <div class="benchmark-grid" id="bench-cards">
+        <div class="bench-card">
+          <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">
+            Click <strong style="color:var(--text)">Run Benchmark</strong> to see live index vs. full-scan timings
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="bench-chart-card" style="display:none">
+        <div class="card-title">📊 Performance Comparison</div>
+        <div class="card-sub">Milliseconds — lower is better. Blue bars use indexed queries.</div>
+        <div class="chart-wrap">
+          <canvas id="benchChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ STUDENTS ══════════════════════════════════════════════════════ -->
+    <section id="section-students" class="section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">👥 Students</h1>
+          <p class="page-subtitle">Browse and search 50,000 seeded students</p>
+        </div>
+        <div class="header-pill" id="student-count-pill">— students</div>
+      </div>
+
+      <div class="card">
+        <div class="search-row">
+          <input
+            id="search-name"
+            class="search-input"
+            type="text"
+            placeholder="🔍 Search by name…"
+            oninput="debounceSearch()"
+          />
+          <select id="search-dept" class="search-select" onchange="searchStudents()">
+            <option value="">All Departments</option>
+            <option value="1">CSE</option>
+            <option value="2">ECE</option>
+            <option value="3">ME</option>
+            <option value="4">CE</option>
+            <option value="5">EEE</option>
+          </select>
+          <select id="search-sem" class="search-select" onchange="searchStudents()">
+            <option value="">All Semesters</option>
+            <option value="1">Sem 1</option>
+            <option value="2">Sem 2</option>
+            <option value="3">Sem 3</option>
+            <option value="4">Sem 4</option>
+            <option value="5">Sem 5</option>
+            <option value="6">Sem 6</option>
+            <option value="7">Sem 7</option>
+            <option value="8">Sem 8</option>
+          </select>
+          <button class="btn btn-outline" onclick="clearSearch()">✕ Clear</button>
+        </div>
+
+        <div id="student-error" style="display:none" class="error-banner">
+          <span>⚠️</span><span id="student-error-msg"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Roll Number</th>
+                <th>Department</th>
+                <th>Semester</th>
+              </tr>
+            </thead>
+            <tbody id="students-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <div class="page-info" id="student-page-info">—</div>
+          <div class="page-btns">
+            <button class="page-btn" id="prev-btn" onclick="changePage(-1)" disabled>← Prev</button>
+            <button class="page-btn current" id="page-indicator">1</button>
+            <button class="page-btn" id="next-btn" onclick="changePage(1)" disabled>Next →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ RESULTS ════════════════════════════════════════════════════════ -->
+    <section id="section-results" class="section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">📋 Results</h1>
+          <p class="page-subtitle">Grade distribution, toppers, and course averages</p>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="results-stats">
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:80px"></div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div class="card">
+          <div class="card-title">🏅 Top 10 Performers</div>
+          <div class="card-sub">CSE · Semester 3 · Ranked by marks</div>
+          <div id="toppers-list">
+            <div class="skeleton" style="height:200px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📊 Grade Distribution</div>
+          <div class="card-sub">Semester 4 · All departments</div>
+          <div class="chart-wrap" style="height:260px">
+            <canvas id="gradeChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── JavaScript ─────────────────────────────────────────────────────── -->
+<script>
+  /* ── State ──────────────────────────────────────────────────────────── */
+  let currentPage     = 0;
+  let totalPages      = 0;
+  let searchDebounce  = null;
+  let benchChart      = null;
+  let gradeChart      = null;
+
+  /* ── Nav ────────────────────────────────────────────────────────────── */
+  function showSection(name) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('section-' + name).classList.add('active');
+    document.getElementById('nav-'     + name).classList.add('active');
+
+    if (name === 'students' && document.getElementById('students-tbody').innerHTML === '') loadStudents();
+    if (name === 'results')  loadResults();
+    if (name === 'overview') loadOverview();
+  }
+
+  /* ── API Base ───────────────────────────────────────────────────────── */
+  const API = '';  // same origin — Spring Boot serves both API and this page
+
+  /* ── Demo / Offline Mode ───────────────────────────────────────────── */
+  const DEMO_REPORT = {
+    generatedAt: new Date().toISOString(),
+    totalStudents: 50000,
+    totalResults: 200000,
+    benchmarks: [
+      { queryDescription: 'Find student by roll number (idx_students_roll_number)',
+        withoutIndexMs: 743, withIndexMs: 3, improvement: '247.7x faster' },
+      { queryDescription: 'Filter students by dept + semester (idx_students_dept_semester)',
+        withoutIndexMs: 520, withIndexMs: 11, improvement: '47.3x faster' },
+      { queryDescription: 'Get results by student + semester (idx_results_student_semester)',
+        withoutIndexMs: 612, withIndexMs: 8, improvement: '76.5x faster' },
+      { queryDescription: 'Find top 10 students in department (JOIN + ORDER BY marks)',
+        withoutIndexMs: 890, withIndexMs: 14, improvement: '63.6x faster' },
+      { queryDescription: 'Count students per department (idx_students_department_id)',
+        withoutIndexMs: 380, withIndexMs: 6, improvement: '63.3x faster' },
+    ],
+    summary: 'Demo mode · Ran 5 benchmark queries on 50,000 student records. Average improvement with indexes: 99.7x faster.'
+  };
+
+  function showDemoBanner(containerId) {
+    const existing = document.getElementById('demo-banner');
+    if (existing) return;
+    const banner = document.createElement('div');
+    banner.id = 'demo-banner';
+    banner.style.cssText = 'background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);' +
+      'color:#fbbf24;border-radius:10px;padding:12px 16px;font-size:12px;margin-bottom:20px;' +
+      'display:flex;align-items:center;gap:8px;';
+    banner.innerHTML = '<span>📡</span><span><strong>Demo mode</strong> — API not reachable. ' +
+      'Showing representative sample data. Run the app with Docker to see live numbers.</span>';
+    const container = document.getElementById(containerId);
+    if (container) container.insertAdjacentElement('afterbegin', banner);
+  }
+
+  /* ── Overview ───────────────────────────────────────────────────────── */
+  async function loadOverview() {
+    document.getElementById('overview-ts').textContent = new Date().toLocaleTimeString();
+    try {
+      // Use benchmark endpoint to get total counts
+      const r  = await fetch(`${API}/api/benchmark/run`);
+      const d  = await r.json();
+      renderOverviewStats(d);
+    } catch(e) {
+      showDemoBanner('section-overview');
+      renderOverviewStats(DEMO_REPORT);
+    }
+  }
+
+  function renderOverviewStats(d) {
+    const gr = document.getElementById('stats-grid');
+    gr.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-icon">👩‍🎓</div>
+        <div class="stat-value">${d.totalStudents.toLocaleString()}</div>
+        <div class="stat-label">Total Students</div>
+        <div class="stat-sub">✓ Seeded via Flyway V2</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📄</div>
+        <div class="stat-value">${d.totalResults.toLocaleString()}</div>
+        <div class="stat-label">Total Results</div>
+        <div class="stat-sub">✓ 4 results per student avg</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🚀</div>
+        <div class="stat-value">${d.benchmarks.length}</div>
+        <div class="stat-label">Benchmark Queries</div>
+        <div class="stat-sub">✓ Index vs. full-scan measured</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-value">${d.benchmarks.length > 0 ? avgImprovement(d.benchmarks) : '—'}</div>
+        <div class="stat-label">Avg. Speedup</div>
+        <div class="stat-sub">✓ B-tree + composite indexes</div>
+      </div>`;
+  }
+
+  function avgImprovement(benchmarks) {
+    const improvements = benchmarks
+      .filter(b => b.withIndexMs > 0)
+      .map(b => b.withoutIndexMs / b.withIndexMs);
+    if (!improvements.length) return '—';
+    const avg = improvements.reduce((a,b) => a+b, 0) / improvements.length;
+    return avg.toFixed(1) + 'x';
+  }
+
+  /* ── Benchmark ──────────────────────────────────────────────────────── */
+  async function runBenchmark() {
+    const btn    = document.getElementById('run-bench-btn');
+    const errEl  = document.getElementById('bench-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div><span>Running…</span>';
+
+    try {
+      const r = await fetch(`${API}/api/benchmark/run`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      renderBenchmarkResults(d);
+    } catch(e) {
+      // Fallback to demo data so the UI is still useful without the API
+      showDemoBanner('section-benchmark');
+      renderBenchmarkResults(DEMO_REPORT);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span>▶ Run Again</span>';
+    }
+  }
+
+  function renderBenchmarkResults(d) {
+      // Summary bar
+      document.getElementById('bench-summary').style.display = 'flex';
+      document.getElementById('bench-summary-text').textContent = d.summary;
+
+      // Cards
+      const maxMs = Math.max(...d.benchmarks.flatMap(b => [b.withoutIndexMs, b.withIndexMs]), 1);
+      document.getElementById('bench-cards').innerHTML = d.benchmarks.map(b => {
+        const slowPct = Math.max(((b.withoutIndexMs / maxMs) * 100).toFixed(1), 4);
+        const fastPct = Math.max(((b.withIndexMs   / maxMs) * 100).toFixed(1), 4);
+        return `
+          <div class="bench-card">
+            <div class="bench-name">${b.queryDescription}</div>
+            <div class="bench-bars">
+              <div class="bench-bar-row">
+                <div class="bench-bar-label">No Index</div>
+                <div class="bench-bar-wrap">
+                  <div class="bench-bar-fill slow" style="width:0%" data-width="${slowPct}%"></div>
+                </div>
+                <div class="bench-bar-ms" style="color:#f97316">${b.withoutIndexMs}ms</div>
+              </div>
+              <div class="bench-bar-row">
+                <div class="bench-bar-label">With Index</div>
+                <div class="bench-bar-wrap">
+                  <div class="bench-bar-fill fast" style="width:0%" data-width="${fastPct}%"></div>
+                </div>
+                <div class="bench-bar-ms" style="color:#8b5cf6">${b.withIndexMs}ms</div>
+              </div>
+            </div>
+            <span class="bench-badge">🚀 ${b.improvement}</span>
+          </div>`;
+      }).join('');
+
+      // Animate bars
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.bench-bar-fill').forEach(el => {
+          el.style.width = el.dataset.width;
+        });
+      });
+
+      // Chart
+      renderBenchChart(d.benchmarks);
+      document.getElementById('bench-chart-card').style.display = 'block';
+  }
+
+  function renderBenchChart(benchmarks) {
+    const ctx = document.getElementById('benchChart').getContext('2d');
+    if (benchChart) benchChart.destroy();
+
+    const labels = benchmarks.map((b, i) => `Query ${i+1}`);
+    benchChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Without Index (ms)',
+            data: benchmarks.map(b => b.withoutIndexMs),
+            backgroundColor: 'rgba(239,68,68,0.6)',
+            borderColor: '#ef4444',
+            borderWidth: 1, borderRadius: 6,
+          },
+          {
+            label: 'With Index (ms)',
+            data: benchmarks.map(b => b.withIndexMs),
+            backgroundColor: 'rgba(139,92,246,0.7)',
+            borderColor: '#8b5cf6',
+            borderWidth: 1, borderRadius: 6,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 1000, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 } } },
+          tooltip: {
+            callbacks: {
+              title: (items) => benchmarks[items[0].dataIndex].queryDescription,
+              label: (item) => ` ${item.dataset.label}: ${item.raw}ms`
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#94a3b8', callback: v => v+'ms' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
+
+  /* ── Students ───────────────────────────────────────────────────────── */
+  async function loadStudents() {
+    const name = document.getElementById('search-name').value.trim() || null;
+    const dept = document.getElementById('search-dept').value || null;
+    const sem  = document.getElementById('search-sem').value  || null;
+    const size = 15;
+    const errEl= document.getElementById('student-error');
+    errEl.style.display = 'none';
+
+    // skeleton rows
+    document.getElementById('students-tbody').innerHTML =
+      Array(size).fill(`<tr>${'<td><div class="skeleton" style="height:18px;border-radius:4px"></div></td>'.repeat(5)}</tr>`).join('');
+
+    try {
+      let url;
+      if (name || dept || sem) {
+        const params = new URLSearchParams({ page: currentPage, size });
+        if (name) params.set('name', name);
+        if (dept) params.set('departmentId', dept);
+        if (sem)  params.set('semester', sem);
+        url = `${API}/api/students/search?${params}`;
+      } else {
+        url = `${API}/api/students?page=${currentPage}&size=${size}&sortBy=id`;
+      }
+
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+
+      totalPages = d.totalPages;
+      const total= d.totalElements;
+      document.getElementById('student-count-pill').textContent = `${total.toLocaleString()} students`;
+      document.getElementById('student-page-info').textContent =
+        `Page ${currentPage+1} of ${totalPages} · ${total.toLocaleString()} total`;
+      document.getElementById('page-indicator').textContent = currentPage + 1;
+      document.getElementById('prev-btn').disabled = currentPage === 0;
+      document.getElementById('next-btn').disabled = currentPage >= totalPages - 1;
+
+      const deptColors = {CSE:'badge-dept',ECE:'badge-dept',ME:'badge-dept',CE:'badge-dept',EEE:'badge-dept'};
+
+      document.getElementById('students-tbody').innerHTML = d.content.length === 0
+        ? `<tr><td colspan="5"><div class="empty-state"><div class="icon">🔍</div>No students found</div></td></tr>`
+        : d.content.map((s,i) => `
+          <tr>
+            <td style="color:var(--text-muted)">${currentPage*size + i + 1}</td>
+            <td style="font-weight:500">${s.name}</td>
+            <td style="font-family:monospace;color:var(--accent-2)">${s.rollNumber}</td>
+            <td><span class="badge badge-dept">${s.departmentCode}</span></td>
+            <td><span class="badge badge-sem">Sem ${s.semester}</span></td>
+          </tr>`).join('');
+
+    } catch(e) {
+      errEl.style.display = 'flex';
+      document.getElementById('student-error-msg').textContent =
+        'Could not load students. Is the Spring Boot app running?';
+      document.getElementById('students-tbody').innerHTML = '';
+    }
+  }
+
+  function changePage(delta) {
+    currentPage = Math.max(0, Math.min(totalPages-1, currentPage + delta));
+    loadStudents();
+  }
+
+  function searchStudents() {
+    currentPage = 0;
+    loadStudents();
+  }
+
+  function debounceSearch() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(searchStudents, 350);
+  }
+
+  function clearSearch() {
+    document.getElementById('search-name').value = '';
+    document.getElementById('search-dept').value = '';
+    document.getElementById('search-sem').value  = '';
+    currentPage = 0;
+    loadStudents();
+  }
+
+  /* ── Results ────────────────────────────────────────────────────────── */
+  async function loadResults() {
+    try {
+      const [toppersR, gradeR] = await Promise.all([
+        fetch(`${API}/api/results/toppers?departmentId=1&semester=3&limit=10`),
+        fetch(`${API}/api/results/grade-distribution?semester=4`)
+      ]);
+      const toppers = await toppersR.json();
+      const grades  = await gradeR.json();
+      renderResultsData(toppers, grades);
+    } catch(e) {
+      // Demo mode fallback — show representative data
+      showDemoBanner('section-results');
+      const demoToppers = Array.from({length:10}, (_,i) => ({
+        studentName: ['Priya Sharma','Arjun Mehta','Sara Ali','Ravi Gupta','Neha Joshi',
+                      'Karan Singh','Anjali Rao','Dev Patel','Fatima Nair','Rohan Das'][i],
+        rollNumber:  `CSE00${String(1000-i*97).padStart(4,'0')}`,
+        marks: (98 - i*1.5).toFixed(1),
+        grade: i < 2 ? 'O' : i < 5 ? 'A+' : 'A'
+      }));
+      const demoGrades = [
+        {grade:'O',count:1820},{grade:'A+',count:4350},{grade:'A',count:7200},
+        {grade:'B+',count:9100},{grade:'B',count:6300},{grade:'C',count:2900},{grade:'F',count:330}
+      ];
+      renderResultsData(demoToppers, demoGrades);
+    }
+  }
+
+  function renderResultsData(toppers, grades) {
+      // Stats
+      document.getElementById('results-stats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-icon">🏅</div>
+          <div class="stat-value">${toppers.length}</div>
+          <div class="stat-label">Top Performers (CSE · Sem 3)</div>
+          <div class="stat-sub">Ranked by marks</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📊</div>
+          <div class="stat-value">${grades.length}</div>
+          <div class="stat-label">Grade Categories</div>
+          <div class="stat-sub">Semester 4 distribution</div>
+        </div>`;
+
+      // Toppers list
+      document.getElementById('toppers-list').innerHTML = toppers.map((t, i) => `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;
+                    border-bottom:1px solid rgba(255,255,255,0.05)">
+          <div style="width:28px;height:28px;border-radius:50%;
+               background:${i<3?'linear-gradient(135deg,#f59e0b,#d97706)':'rgba(255,255,255,0.06)'};
+               display:flex;align-items:center;justify-content:center;
+               font-size:12px;font-weight:700;flex-shrink:0">
+            ${i+1}
+          </div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500">${t.studentName}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${t.rollNumber}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:${t.marks>=90?'#10b981':t.marks>=75?'#8b5cf6':'#94a3b8'}">${t.marks}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${t.grade}</div>
+          </div>
+        </div>`).join('');
+
+      // Grade chart
+      renderGradeChart(grades);
+  }
+
+  function renderGradeChart(grades) {
+    const ctx = document.getElementById('gradeChart').getContext('2d');
+    if (gradeChart) gradeChart.destroy();
+
+    const colors = {
+      'O' :'rgba(16,185,129,0.8)',
+      'A+':'rgba(139,92,246,0.8)',
+      'A' :'rgba(6,182,212,0.8)',
+      'B+':'rgba(245,158,11,0.8)',
+      'B' :'rgba(249,115,22,0.8)',
+      'C' :'rgba(239,68,68,0.8)',
+      'F' :'rgba(100,116,139,0.8)',
+    };
+
+    gradeChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: grades.map(g => `${g.grade} (${g.count})`),
+        datasets: [{
+          data: grades.map(g => g.count),
+          backgroundColor: grades.map(g => colors[g.grade] || 'rgba(148,163,184,0.6)'),
+          borderColor: 'transparent',
+          borderWidth: 0,
+          hoverOffset: 8,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color:'#94a3b8', font:{ family:'Inter', size:12 }, padding: 12, boxWidth: 12 }
+          }
+        },
+        animation: { animateRotate: true, duration: 900 }
+      }
+    });
+  }
+
+  /* ── Init ───────────────────────────────────────────────────────────── */
+  loadOverview();
+</script>
+</body>
+</html>
