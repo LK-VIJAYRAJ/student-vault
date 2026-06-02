@@ -14,9 +14,10 @@
 
 spring:
   datasource:
-    # sslmode=prefer works for both Railway internal (no SSL) and external (SSL) connections.
-    # sslmode=require caused SSL handshake timeouts on Railway's private network.
-    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=prefer
+    # Railway internal hostname (postgres.railway.internal) does NOT support SSL.
+    # sslmode=prefer still times out because it sends an SSLRequest and waits for
+    # a server response that never arrives. sslmode=disable skips negotiation entirely.
+    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=disable
     username: ${PGUSER}
     password: ${PGPASSWORD}
     hikari:
