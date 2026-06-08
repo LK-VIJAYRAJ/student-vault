@@ -1,5 +1,7 @@
 package com.studentvault.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.studentvault.dto.BenchmarkDTO;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -22,12 +24,15 @@ import java.util.List;
  *
  * How it works:
  * 1. Temporarily disable index usage via SET enable_indexscan = off
- * 2. Run the query and measure elapsed time (simulates "without index")
- * 3. Re-enable indexes
- * 4. Run the same query and measure again
- * 5. Return both timings + improvement percentage
+ * 2. Run EXPLAIN (ANALYZE, FORMAT JSON) to get the SERVER-SIDE execution time
+ *    — this excludes network latency, giving real PostgreSQL timing
+ * 3. Re-enable indexes and run again
+ * 4. Return both timings + improvement ratio
  *
- * PostgreSQL-specific: uses pg_sleep and query hints to simulate pre/post index.
+ * Why EXPLAIN ANALYZE instead of System.currentTimeMillis()?
+ * On remote databases (Neon, RDS, etc.) network RTT (~70ms) dominates
+ * wall-clock time, making both queries look equally slow. EXPLAIN ANALYZE
+ * reports time as measured by PostgreSQL itself — pure execution time.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,6 +41,8 @@ public class BenchmarkService {
 
     @PersistenceContext
     private EntityManager entityManager;
+
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public BenchmarkDTO.BenchmarkReport runBenchmark() {
@@ -49,21 +56,18 @@ public class BenchmarkService {
         // --- Benchmark 1: Find student by roll number ---
         benchmarks.add(runQueryBenchmark(
                 "Find student by roll number (idx_students_roll_number)",
-                "SELECT * FROM students WHERE roll_number = 'CSE000042'",
-                "SELECT /*+ SeqScan(students) */ * FROM students WHERE roll_number = 'CSE000042'"
+                "SELECT * FROM students WHERE roll_number = 'CSE000042'"
         ));
 
         // --- Benchmark 2: Filter students by department + semester ---
         benchmarks.add(runQueryBenchmark(
                 "Filter students by department + semester (idx_students_dept_semester)",
-                "SELECT * FROM students WHERE department_id = 1 AND semester = 4 LIMIT 100",
                 "SELECT * FROM students WHERE department_id = 1 AND semester = 4 LIMIT 100"
         ));
 
         // --- Benchmark 3: Get results for a specific student + semester ---
         benchmarks.add(runQueryBenchmark(
                 "Get results by student + semester (idx_results_student_semester)",
-                "SELECT * FROM results WHERE student_id = 1000 AND semester = 4",
                 "SELECT * FROM results WHERE student_id = 1000 AND semester = 4"
         ));
 
@@ -76,20 +80,12 @@ public class BenchmarkService {
                 JOIN students s ON r.student_id = s.id
                 WHERE s.department_id = 1 AND r.semester = 3
                 ORDER BY r.marks DESC LIMIT 10
-                """,
-                """
-                SELECT s.name, s.roll_number, r.marks, r.grade
-                FROM results r
-                JOIN students s ON r.student_id = s.id
-                WHERE s.department_id = 1 AND r.semester = 3
-                ORDER BY r.marks DESC LIMIT 10
                 """
         ));
 
         // --- Benchmark 5: Count students per department ---
         benchmarks.add(runQueryBenchmark(
                 "Count students per department (idx_students_department_id)",
-                "SELECT department_id, COUNT(*) FROM students GROUP BY department_id",
                 "SELECT department_id, COUNT(*) FROM students GROUP BY department_id"
         ));
 
@@ -106,50 +102,33 @@ public class BenchmarkService {
     }
 
     /**
-     * Runs a query twice:
-     * 1. With index scans DISABLED (simulates pre-optimization state)
-     * 2. With index scans ENABLED (post-optimization state)
+     * Runs a query twice using EXPLAIN ANALYZE:
+     * 1. With index scans DISABLED (sequential scan — simulates pre-optimization)
+     * 2. With index scans ENABLED (index scan — post-optimization)
      *
-     * Uses PostgreSQL's enable_indexscan flag to toggle index usage.
+     * EXPLAIN (ANALYZE, FORMAT JSON) returns PostgreSQL's own execution time
+     * in milliseconds — measured server-side, no network latency included.
      */
-    private BenchmarkDTO runQueryBenchmark(String description,
-                                           String optimizedQuery,
-                                           String fullScanQuery) {
+    private BenchmarkDTO runQueryBenchmark(String description, String query) {
         // --- Run WITHOUT index (sequential scan forced) ---
-        entityManager.createNativeQuery("SET enable_indexscan = off").executeUpdate();
-        entityManager.createNativeQuery("SET enable_bitmapscan = off").executeUpdate();
-
-        long start1 = System.currentTimeMillis();
-        try {
-            entityManager.createNativeQuery(fullScanQuery).getResultList();
-        } catch (Exception e) {
-            log.warn("Query failed in no-index mode: {}", e.getMessage());
-        }
-        long withoutIndexMs = System.currentTimeMillis() - start1;
+        disableIndexScans();
+        long withoutIndexMs = explainAnalyzeMs(query);
 
         // --- Re-enable indexes ---
-        entityManager.createNativeQuery("SET enable_indexscan = on").executeUpdate();
-        entityManager.createNativeQuery("SET enable_bitmapscan = on").executeUpdate();
+        enableIndexScans();
 
-        // Warm up (avoid cold cache skewing results)
+        // Warm up: prime PostgreSQL's buffer cache before the real measurement
         try {
-            entityManager.createNativeQuery(optimizedQuery).getResultList();
+            entityManager.createNativeQuery(query).getResultList();
         } catch (Exception ignored) {}
 
         // --- Run WITH index ---
-        long start2 = System.currentTimeMillis();
-        try {
-            entityManager.createNativeQuery(optimizedQuery).getResultList();
-        } catch (Exception e) {
-            log.warn("Query failed in index mode: {}", e.getMessage());
-        }
-        long withIndexMs = System.currentTimeMillis() - start2;
+        long withIndexMs = explainAnalyzeMs(query);
 
-        // Ensure always-on after benchmark
-        entityManager.createNativeQuery("SET enable_indexscan = on").executeUpdate();
-        entityManager.createNativeQuery("SET enable_bitmapscan = on").executeUpdate();
+        // Ensure index scans are always re-enabled after benchmark
+        enableIndexScans();
 
-        String improvement = withIndexMs > 0
+        String improvement = (withIndexMs > 0 && withoutIndexMs > 0)
                 ? String.format("%.1fx faster", (double) withoutIndexMs / withIndexMs)
                 : "N/A";
 
@@ -161,8 +140,41 @@ public class BenchmarkService {
                 .withoutIndexMs(withoutIndexMs)
                 .withIndexMs(withIndexMs)
                 .improvement(improvement)
-                .queryPlan("Use EXPLAIN ANALYZE in psql for full plan details")
+                .queryPlan("Timed via EXPLAIN ANALYZE — server-side only, excludes network latency")
                 .build();
+    }
+
+    /**
+     * Runs EXPLAIN (ANALYZE, FORMAT JSON) and extracts PostgreSQL's reported
+     * "Execution Time" (in ms). Falls back to wall-clock if parsing fails.
+     */
+    private long explainAnalyzeMs(String sql) {
+        try {
+            String explainSql = "EXPLAIN (ANALYZE, FORMAT JSON) " + sql;
+            Object result = entityManager.createNativeQuery(explainSql).getSingleResult();
+            JsonNode root = objectMapper.readTree(result.toString());
+            // PostgreSQL returns array: [{"Plan": {...}, "Execution Time": 1.234}]
+            double executionTimeMs = root.get(0).get("Execution Time").asDouble();
+            return Math.max(1L, Math.round(executionTimeMs));
+        } catch (Exception e) {
+            log.warn("EXPLAIN ANALYZE parse failed, falling back to wall-clock: {}", e.getMessage());
+            // Fallback: wall-clock timing (includes network RTT — less accurate on remote DBs)
+            long start = System.currentTimeMillis();
+            try {
+                entityManager.createNativeQuery(sql).getResultList();
+            } catch (Exception ignored) {}
+            return System.currentTimeMillis() - start;
+        }
+    }
+
+    private void disableIndexScans() {
+        entityManager.createNativeQuery("SET enable_indexscan = off").executeUpdate();
+        entityManager.createNativeQuery("SET enable_bitmapscan = off").executeUpdate();
+    }
+
+    private void enableIndexScans() {
+        entityManager.createNativeQuery("SET enable_indexscan = on").executeUpdate();
+        entityManager.createNativeQuery("SET enable_bitmapscan = on").executeUpdate();
     }
 
     private long countTable(String tableName) {
@@ -179,7 +191,8 @@ public class BenchmarkService {
                 .average().orElse(0);
         return String.format(
                 "Ran %d benchmark queries on %d student records. " +
-                "Average improvement with indexes: %.1fx faster.",
+                "Average improvement with indexes: %.1fx faster. " +
+                "(Measured via EXPLAIN ANALYZE — server-side execution time, no network latency.)",
                 benchmarks.size(), 50000, avgImprovement);
     }
 }
