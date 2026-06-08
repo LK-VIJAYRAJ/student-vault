@@ -16,11 +16,11 @@ A production-grade **Student Result Management System** built with **Spring Boot
 
 | Resource | URL |
 |---|---|
-| **Swagger UI** | https://student-vault-xxx.koyeb.app/swagger-ui.html |
-| **Benchmark endpoint** | https://student-vault-xxx.koyeb.app/api/benchmark/run |
-| **Health check** | https://student-vault-xxx.koyeb.app/actuator/health |
+| **Swagger UI** | https://student-vault-584m.onrender.com/swagger-ui.html |
+| **Benchmark endpoint** | https://student-vault-584m.onrender.com/api/benchmark/run |
+| **Health check** | https://student-vault-584m.onrender.com/actuator/health |
 
-> ✅ Hosted on **Koyeb** — always-on, no cold starts. The benchmark page is the best one to share in interviews.
+> ⏳ Free tier spins down after inactivity — first request may take ~50s to wake up. After that, all endpoints respond instantly.
 
 ---
 

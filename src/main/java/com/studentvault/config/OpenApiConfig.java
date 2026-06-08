@@ -35,6 +35,7 @@ public class OpenApiConfig {
     public OpenAPI studentVaultOpenAPI() {
         List<Server> servers = new ArrayList<>();
         servers.add(new Server().url("http://localhost:8080").description("Local / Docker"));
+        servers.add(new Server().url("https://student-vault-584m.onrender.com").description("Render (Production)"));
         servers.add(new Server().url("https://student-vault-production-e297.up.railway.app").description("Railway"));
         if (appBaseUrl != null && !appBaseUrl.isBlank()) {
             servers.add(0, new Server().url(appBaseUrl).description("Production (Koyeb)"));
