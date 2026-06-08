@@ -4,8 +4,8 @@
 FROM maven:3.9.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 COPY pom.xml .
-# Download ALL compile + plugin dependencies (more reliable than go-offline for springdoc)
-RUN mvn dependency:resolve dependency:resolve-plugins -q
+# Download dependencies first (cached layer — speeds up rebuilds)
+RUN mvn dependency:go-offline -q
 COPY src ./src
 RUN mvn package -DskipTests -q
 
